@@ -79,7 +79,7 @@ class CodiiConfig:
     # HNSW settings
     hnsw_m: int = 16
     hnsw_ef_construction: int = 200
-    hnsw_ef_search: int = 50
+    hnsw_ef_search: int = 100  # Increased from 50 for better recall on multi-word queries
 
     # Chunk settings
     max_chunk_size: int = 1500

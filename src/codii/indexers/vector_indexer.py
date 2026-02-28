@@ -24,7 +24,7 @@ class VectorIndexer:
         max_elements: int = 1000000,
         m: int = 16,
         ef_construction: int = 200,
-        ef_search: int = 50,
+        ef_search: int = 100,  # Increased from 50 for better recall on multi-word queries
     ):
         """
         Initialize the vector indexer.

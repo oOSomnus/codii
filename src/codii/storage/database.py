@@ -1,9 +1,66 @@
 """SQLite database management for codii."""
 
+import re
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import threading
+
+
+def preprocess_fts_query(query: str, use_or: bool = True, add_wildcards: bool = True) -> str:
+    """
+    Preprocess a query for FTS5 full-text search.
+
+    Converts multi-word queries to use OR matching for better recall,
+    and adds wildcard suffixes for partial matching.
+
+    Args:
+        query: The search query
+        use_or: If True, convert multi-word queries to OR-based matching
+        add_wildcards: If True, add wildcard suffixes to terms
+
+    Returns:
+        Preprocessed FTS5 query string
+
+    Examples:
+        >>> preprocess_fts_query("page table walk")
+        'page* OR table* OR walk*'
+        >>> preprocess_fts_query("kalloc")
+        'kalloc*'
+    """
+    if not query or not query.strip():
+        return ""
+
+    # Remove FTS5 special characters that could cause issues
+    # FTS5 special chars: * ^ " ( ) - |
+    cleaned = re.sub(r'[*^"()\-|]', ' ', query)
+
+    # Split into terms
+    terms = cleaned.split()
+
+    if not terms:
+        return ""
+
+    processed_terms = []
+    for term in terms:
+        term = term.strip()
+        if not term:
+            continue
+
+        # Add wildcard suffix for partial matching
+        if add_wildcards and not term.endswith('*'):
+            term = f"{term}*"
+
+        processed_terms.append(term)
+
+    if not processed_terms:
+        return ""
+
+    # Join with OR for better recall
+    if use_or and len(processed_terms) > 1:
+        return ' OR '.join(processed_terms)
+    else:
+        return processed_terms[0] if len(processed_terms) == 1 else ' OR '.join(processed_terms)
 
 
 class Database:
@@ -124,9 +181,16 @@ class Database:
         self.conn.commit()
 
     def search_bm25(self, query: str, limit: int = 10, path_filter: Optional[str] = None) -> list:
-        """Search using BM25 via FTS5."""
-        # Escape special characters for FTS5
-        escaped_query = query.replace("'", "''")
+        """Search using BM25 via FTS5.
+
+        Uses query preprocessing to convert multi-word queries to OR-based
+        matching with wildcards for better recall.
+        """
+        # Preprocess the query for better FTS5 matching
+        fts_query = preprocess_fts_query(query, use_or=True, add_wildcards=True)
+
+        # Escape single quotes for SQL
+        escaped_query = fts_query.replace("'", "''")
 
         if path_filter:
             sql = f"""

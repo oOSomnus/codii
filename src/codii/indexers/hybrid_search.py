@@ -1,4 +1,4 @@
-"""Hybrid search combining BM25 and vector search."""
+"""Hybrid search combining BM25 and vector search using Reciprocal Rank Fusion."""
 
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -26,7 +26,7 @@ class SearchResult:
 
 
 class HybridSearch:
-    """Hybrid search combining BM25 and vector search."""
+    """Hybrid search combining BM25 and vector search using Reciprocal Rank Fusion."""
 
     def __init__(
         self,
@@ -41,8 +41,8 @@ class HybridSearch:
         Args:
             db_path: Path to SQLite database
             vector_path: Path to vector index
-            bm25_weight: Weight for BM25 scores
-            vector_weight: Weight for vector scores
+            bm25_weight: Weight for BM25 scores in RRF
+            vector_weight: Weight for vector scores in RRF
         """
         self.bm25_indexer = BM25Indexer(db_path)
         self.vector_indexer = VectorIndexer(vector_path)
@@ -56,7 +56,7 @@ class HybridSearch:
         path_filter: Optional[str] = None,
     ) -> List[SearchResult]:
         """
-        Perform hybrid search.
+        Perform hybrid search using Reciprocal Rank Fusion.
 
         Args:
             query: Search query
@@ -64,7 +64,7 @@ class HybridSearch:
             path_filter: Optional path filter
 
         Returns:
-            List of SearchResult objects
+            List of SearchResult objects ranked by combined RRF score
         """
         config = get_config()
         bm25_weight = self.bm25_weight or config.bm25_weight
@@ -114,11 +114,14 @@ class HybridSearch:
 
         RRF score = sum(weight / (k + rank)) for each ranking
 
+        This method is robust when one retriever returns no results - it simply
+        uses the scores from the other retriever.
+
         Args:
             bm25_results: BM25 search results
             vector_results: Vector search results (chunk_id, distance)
-            bm25_weight: Weight for BM25
-            vector_weight: Weight for vectors
+            bm25_weight: Weight for BM25 ranks
+            vector_weight: Weight for vector ranks
             k: RRF constant (default 60)
 
         Returns:

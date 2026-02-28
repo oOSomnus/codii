@@ -103,6 +103,7 @@ sequenceDiagram
 ## Features
 
 - **Hybrid Search**: Combines BM25 (SQLite FTS5) and vector search (HNSW) for optimal code retrieval
+- **Smart Query Processing**: Multi-word queries are optimized with OR-matching, wildcards, code tokenization, and abbreviation expansion for better recall
 - **AST-Aware Chunking**: Uses tree-sitter for semantic code splitting (functions, classes, etc.)
 - **Incremental Updates**: Merkle tree-based change detection for efficient re-indexing
 - **Local Embeddings**: CPU-runnable all-MiniLM-L6-v2 model for vector embeddings
@@ -409,7 +410,8 @@ codii/
 │   ├── indexers/              # Search indexers
 │   │   ├── bm25_indexer.py    # SQLite FTS5
 │   │   ├── vector_indexer.py  # HNSW
-│   │   └── hybrid_search.py   # RRF combination
+│   │   ├── hybrid_search.py   # RRF combination
+│   │   └── query_processor.py # Query preprocessing
 │   ├── chunkers/              # Code chunking
 │   │   ├── ast_chunker.py     # tree-sitter based
 │   │   └── text_chunker.py    # Fallback

@@ -47,7 +47,7 @@ SEMANTIC_NODES = {
     "javascript": {"function_declaration", "class_declaration", "method_definition", "arrow_function", "function_expression"},
     "typescript": {"function_declaration", "class_declaration", "method_definition", "arrow_function", "function_expression", "interface_declaration", "type_alias_declaration"},
     "go": {"function_declaration", "method_declaration", "type_declaration"},
-    "rust": {"function_definition", "struct_item", "enum_item", "impl_item", "trait_item"},
+    "rust": {"function_item", "struct_item", "enum_item", "impl_item", "trait_item"},
     "java": {"method_declaration", "class_declaration", "interface_declaration", "enum_declaration"},
     "c": {"function_definition", "struct_specifier", "enum_specifier"},
     "cpp": {"function_definition", "class_specifier", "struct_specifier", "namespace_definition"},
@@ -198,15 +198,24 @@ class ASTChunker:
                     pass
 
                 if len(chunk_content) >= effective_min:
+                    # Normalize chunk type by removing common suffixes
+                    chunk_type = node_type
+                    for suffix in ["_definition", "_declaration", "_item", "_specifier"]:
+                        chunk_type = chunk_type.replace(suffix, "")
+
                     chunks.append(CodeChunk(
                         content=chunk_content,
                         path=path,
                         start_line=start_line,
                         end_line=end_line,
                         language=language,
-                        chunk_type=node_type.replace("_definition", "").replace("_declaration", "").replace("_item", ""),
+                        chunk_type=chunk_type,
                         name=name,
                     ))
+
+                # Continue recursion to find nested semantic units (e.g., methods inside classes)
+                for child in current_node.children:
+                    visit_node(child, node_type)
             else:
                 # Recursively visit children
                 for child in current_node.children:

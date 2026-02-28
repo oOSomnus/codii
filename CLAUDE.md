@@ -50,6 +50,13 @@ The codebase follows a strict layered architecture where dependencies flow downw
 
 **Hybrid Search**: Uses Reciprocal Rank Fusion (RRF) to combine BM25 and vector search results. See `hybrid_search.py:_reciprocal_rank_fusion()`.
 
+**Query Preprocessing**: Multi-word queries are preprocessed for better recall:
+- OR-based matching: "page table walk" → "page* OR table* OR walk*"
+- Wildcard suffixes for partial matching: "kalloc" → "kalloc*"
+- Code tokenization: camelCase/snake_case identifiers are split
+- Abbreviation expansion: common code abbreviations are expanded
+- See `query_processor.py` and `database.py:preprocess_fts_query()`
+
 **Codebase Isolation**: Each codebase gets its own index directory under `~/.codii/indexes/<hash-of-path>/`. The path hash is computed via SHA-256.
 
 **Automatic Gitignore**: The `scan_directory` function automatically reads and applies `.gitignore` patterns from the repository root. Combined with default ignore patterns from config.
@@ -90,12 +97,12 @@ The test suite uses pytest with mocked embeddings. Key patterns:
 
 **Mock Embedder**: Tests use `mock_embedder` fixture in `conftest.py` which returns deterministic vectors. The fixture is auto-applied via `autouse=True`.
 
-**HNSW Requirements**: Vector index tests need 50+ vectors for HNSW reliability. Use `ef_search=100` for consistent results.
+**HNSW Requirements**: Vector index tests need 50+ vectors for HNSW reliability. Default `ef_search=100` for better recall on multi-word queries.
 
 **Test Structure**: Tests are organized by component:
 - `tests/test_storage/` - Database and snapshot tests
-- `tests/test_indexers/` - BM25, vector, and hybrid search tests
-- `tests/test_chunkers/` - AST and text chunker tests
+- `tests/test_indexers/` - BM25, vector, hybrid search, and query processor tests
+- `tests/test_chunkers/` - AST and text chunker tests (including comprehensive language tests)
 - `tests/test_merkle/` - Merkle tree tests
 - `tests/test_tools/` - MCP tool tests
 - `tests/test_integration/` - End-to-end workflow tests
