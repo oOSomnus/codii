@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/codii.png" alt="Codii" width="200">
+</p>
+
 # Codii - Local Code Repository Indexing MCP Server
 
 A local code repository indexing MCP (Model Context Protocol) server with hybrid BM25 and vector search capabilities.
