@@ -109,10 +109,63 @@ sequenceDiagram
 - **Multi-Language Support**: Python, JavaScript, TypeScript, Go, Rust, Java, C/C++
 - **Gitignore Support**: Automatically respects `.gitignore` patterns when indexing
 
+## Prerequisites
+
+This package depends on `hnswlib` which requires C++ compilation. You need Python development headers installed:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt install python3-dev build-essential
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install python3-devel gcc-c++
+```
+
+**macOS:**
+```bash
+xcode-select --install
+```
+
+**Alpine Linux:**
+```bash
+apk add python3-dev gcc g++ musl-dev
+```
+
 ## Installation
 
+### Option 1: pipx (Recommended)
+
+Best for CLI tools - provides automatic isolation and easy management.
+
 ```bash
-# Clone and install
+# Install directly from GitHub
+pipx install git+https://github.com/oOSomnus/Codii.git
+
+# Or install from local clone
+git clone https://github.com/oOSomnus/Codii.git
+cd codii
+pipx install .
+```
+
+### Option 2: pip with venv
+
+For users who prefer manual environment management.
+
+```bash
+git clone https://github.com/oOSomnus/Codii.git
+cd codii
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e .
+```
+
+### Option 3: uv
+
+For users who already use uv.
+
+```bash
 git clone https://github.com/oOSomnus/Codii.git
 cd codii
 uv pip install -e .
@@ -121,8 +174,11 @@ uv pip install -e .
 ## Uninstallation
 
 ```bash
-# Remove the package
-uv pip uninstall codii
+# If installed with pipx
+pipx uninstall codii
+
+# If installed with pip/uv
+pip uninstall codii
 
 # Remove Claude Code integration
 claude mcp remove codii
@@ -135,12 +191,20 @@ rm -rf ~/.codii/
 
 ### Running the MCP Server
 
+After installation, simply run:
+
+```bash
+codii
+```
+
+If running from the source directory without installing:
+
 ```bash
 # Using uv
 uv run python -m codii.server
 
-# Or directly
-codii
+# Using standard Python
+python -m codii.server
 ```
 
 ### MCP Tools
@@ -196,21 +260,33 @@ Clear an indexed codebase.
 
 ### Claude Code
 
-After installing the package locally, add it to Claude Code:
+After installing the package (via pipx or pip), add it to Claude Code:
 
 ```bash
-# Add the MCP server to Claude Code
-claude mcp add --transport stdio codii -- uv run --directory /path/to/codii python -m codii.server
-```
-
-Or if you've installed the package:
-
-```bash
-# After running: uv pip install -e .
+# Simple method - works after pipx install or pip install
 claude mcp add --transport stdio codii -- codii
 ```
 
 For manual configuration, edit `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "codii": {
+      "command": "codii"
+    }
+  }
+}
+```
+
+**Development Setup** (running from source without installing):
+
+```bash
+# Add using uv to run from source directory
+claude mcp add --transport stdio codii -- uv run --directory /path/to/codii python -m codii.server
+```
+
+Or manually:
 
 ```json
 {
@@ -231,8 +307,7 @@ To use a custom storage location, set the `CODII_BASE_DIR` environment variable:
 {
   "mcpServers": {
     "codii": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/codii", "python", "-m", "codii.server"],
+      "command": "codii",
       "env": {
         "CODII_BASE_DIR": "/custom/storage/path"
       }
@@ -337,8 +412,11 @@ codii/
 ## Development
 
 ```bash
-# Install dev dependencies
+# Install dev dependencies (using uv)
 uv pip install -e ".[dev]"
+
+# Or using pip
+pip install -e ".[dev]"
 
 # Run tests
 pytest
