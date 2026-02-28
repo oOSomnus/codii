@@ -112,7 +112,7 @@ sequenceDiagram
 
 ```bash
 # Clone and install
-git clone https://github.com/yourorg/codii.git
+git clone https://github.com/oOSomnus/codi.git
 cd codii
 uv pip install -e .
 
