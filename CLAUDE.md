@@ -1,0 +1,99 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+# Install package
+uv pip install -e .
+
+# Run the MCP server
+uv run python -m codii.server
+
+# Run directly (after install)
+codii
+
+# Clear all index data (useful during development)
+rm -rf ~/.codii/
+
+# Run all tests
+pytest
+
+# Run tests with coverage
+pytest --cov=codii --cov-report=term-missing
+
+# Run specific test file
+pytest tests/test_indexers/test_hybrid_search.py
+
+# Run specific test
+pytest tests/test_storage/test_database.py::TestInsertChunk::test_insert_chunk
+```
+
+## Architecture
+
+### Layered Design
+
+The codebase follows a strict layered architecture where dependencies flow downward:
+
+1. **Tools** (`tools/`) - MCP tool implementations that orchestrate lower layers
+2. **Indexers** (`indexers/`) - Search engines (BM25, Vector, Hybrid)
+3. **Chunkers** (`chunkers/`) - Code splitting (AST-based via tree-sitter, text fallback)
+4. **Storage** (`storage/`) - SQLite database, snapshot state
+5. **Utils** (`utils/`) - Config, file scanning
+
+### Key Patterns
+
+**Singleton Embedder**: The `Embedder` class uses singleton pattern to ensure only one sentence-transformers model is loaded. Access via `get_embedder()`.
+
+**Background Indexing**: `index_codebase` runs indexing in a background thread. Progress is tracked via `SnapshotManager` in `~/.codii/snapshots/snapshot.json`. Check status with `get_indexing_status`.
+
+**Hybrid Search**: Uses Reciprocal Rank Fusion (RRF) to combine BM25 and vector search results. See `hybrid_search.py:_reciprocal_rank_fusion()`.
+
+**Codebase Isolation**: Each codebase gets its own index directory under `~/.codii/indexes/<hash-of-path>/`. The path hash is computed via SHA-256.
+
+### Tree-Sitter Integration
+
+The AST chunker (`chunkers/ast_chunker.py`) uses tree-sitter with language-specific grammars:
+- Create `Language` object: `Language(tree_sitter_python.language())`
+- Create `Parser` with the language
+- Node types for semantic units are defined in `SEMANTIC_NODES` dict
+
+### Database Schema
+
+SQLite with FTS5 virtual table for full-text search:
+- `chunks` table stores content with metadata (path, line numbers, language, chunk_type)
+- `chunks_fts` is the FTS5 virtual table synced via triggers
+- `files` table tracks file hashes for Merkle tree
+
+### Configuration
+
+Config is loaded from (in order):
+1. Environment variable `CODII_BASE_DIR`
+2. `.codii.yaml` in project root
+3. Default `~/.codii/`
+
+Access via `get_config()` from `utils/config.py`.
+
+## Adding a New Language
+
+1. Add tree-sitter dependency to `pyproject.toml`
+2. Add language to `LANGUAGE_MAP` in `ast_chunker.py`
+3. Add semantic node types to `SEMANTIC_NODES` dict
+4. Add language to file extension mapping in `file_utils.py:detect_language()`
+
+## Testing
+
+The test suite uses pytest with mocked embeddings. Key patterns:
+
+**Mock Embedder**: Tests use `mock_embedder` fixture in `conftest.py` which returns deterministic vectors. The fixture is auto-applied via `autouse=True`.
+
+**HNSW Requirements**: Vector index tests need 50+ vectors for HNSW reliability. Use `ef_search=100` for consistent results.
+
+**Test Structure**: Tests are organized by component:
+- `tests/test_storage/` - Database and snapshot tests
+- `tests/test_indexers/` - BM25, vector, and hybrid search tests
+- `tests/test_chunkers/` - AST and text chunker tests
+- `tests/test_merkle/` - Merkle tree tests
+- `tests/test_tools/` - MCP tool tests
+- `tests/test_integration/` - End-to-end workflow tests
