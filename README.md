@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/codii.png" alt="Codii" width="200">
+  <img src="assets/codii.png" alt="Codii">
 </p>
 
 # Codii - Local Code Repository Indexing MCP Server
