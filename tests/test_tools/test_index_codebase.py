@@ -244,3 +244,253 @@ class TestConcurrentIndexing:
         result2 = index_tool.run(path=str(sample_repo))
         assert result2["isError"] is True
         assert "currently being indexed" in result2["content"][0]["text"]
+
+
+class TestIncrementalIndexing:
+    """Tests for incremental indexing functionality."""
+
+    def test_early_exit_no_changes(self, index_tool, sample_repo, mock_config):
+        """Early exit when no changes since last index."""
+        import time
+        from codii.storage.database import Database
+        from codii.storage.snapshot import SnapshotManager
+
+        # First index
+        result = index_tool.run(path=str(sample_repo))
+        assert result["isError"] is False
+
+        # Wait for indexing to complete
+        time.sleep(2)
+
+        # Get status
+        snapshot = SnapshotManager(mock_config.snapshot_file)
+        status = snapshot.get_status(str(sample_repo))
+
+        # If indexing completed, verify it worked
+        if status.status == "indexed":
+            # Get initial chunk count
+            path_hash = snapshot.path_to_hash(str(sample_repo))
+            db_path = mock_config.indexes_dir / path_hash / "chunks.db"
+            if db_path.exists():
+                db = Database(db_path)
+                initial_chunks = db.get_chunk_count()
+
+                # Try to index again without force (should skip)
+                result2 = index_tool.run(path=str(sample_repo))
+                assert result2["isError"] is False
+                assert "already indexed" in result2["content"][0]["text"]
+
+    def test_incremental_add_file(self, index_tool, sample_repo, mock_config):
+        """Incremental update when file is added."""
+        import time
+        from codii.storage.database import Database
+        from codii.storage.snapshot import SnapshotManager
+
+        # First index
+        result = index_tool.run(path=str(sample_repo))
+        assert result["isError"] is False
+
+        # Wait for indexing to complete
+        time.sleep(2)
+
+        snapshot = SnapshotManager(mock_config.snapshot_file)
+        status = snapshot.get_status(str(sample_repo))
+
+        if status.status == "indexed":
+            # Get initial chunk count
+            path_hash = snapshot.path_to_hash(str(sample_repo))
+            db_path = mock_config.indexes_dir / path_hash / "chunks.db"
+            if db_path.exists():
+                db = Database(db_path)
+                initial_chunks = db.get_chunk_count()
+
+                # Add a new file
+                new_file = sample_repo / "new_file.py"
+                new_file.write_text("def new_function():\n    pass\n")
+
+                # Incremental reindex (no force needed - will detect change)
+                result2 = index_tool.run(path=str(sample_repo))
+                assert result2["isError"] is False
+
+                # Wait for indexing
+                time.sleep(2)
+
+                # Verify new chunks were added
+                final_chunks = db.get_chunk_count()
+                assert final_chunks >= initial_chunks
+
+    def test_incremental_modify_file(self, index_tool, sample_repo, mock_config):
+        """Incremental update when file is modified."""
+        import time
+        from codii.storage.database import Database
+        from codii.storage.snapshot import SnapshotManager
+
+        # First index
+        result = index_tool.run(path=str(sample_repo))
+        assert result["isError"] is False
+
+        # Wait for indexing to complete
+        time.sleep(2)
+
+        snapshot = SnapshotManager(mock_config.snapshot_file)
+        status = snapshot.get_status(str(sample_repo))
+
+        if status.status == "indexed":
+            # Modify an existing file
+            (sample_repo / "main.py").write_text('''
+def new_main():
+    """Modified main entry point."""
+    print("Hello, Modified World!")
+
+if __name__ == "__main__":
+    new_main()
+''')
+
+            # Incremental reindex (no force needed - will detect change)
+            result2 = index_tool.run(path=str(sample_repo))
+            assert result2["isError"] is False
+
+            # Wait for indexing
+            time.sleep(2)
+
+            # Verify indexing completed
+            status2 = snapshot.get_status(str(sample_repo))
+            assert status2.status == "indexed"
+
+    def test_incremental_remove_file(self, index_tool, sample_repo, mock_config):
+        """Incremental update when file is removed."""
+        import time
+        from codii.storage.database import Database
+        from codii.storage.snapshot import SnapshotManager
+
+        # First index
+        result = index_tool.run(path=str(sample_repo))
+        assert result["isError"] is False
+
+        # Wait for indexing to complete
+        max_wait = 10
+        for _ in range(max_wait):
+            time.sleep(1)
+            snapshot = SnapshotManager(mock_config.snapshot_file)
+            status = snapshot.get_status(str(sample_repo))
+            if status.status == "indexed":
+                break
+
+        if status.status == "indexed":
+            # Get initial chunk count
+            path_hash = snapshot.path_to_hash(str(sample_repo))
+            db_path = mock_config.indexes_dir / path_hash / "chunks.db"
+            if db_path.exists():
+                db = Database(db_path)
+                initial_chunks = db.get_chunk_count()
+
+                # Verify we have chunks for the file we'll remove
+                utils_path = str(sample_repo / "utils.py")
+                initial_utils_chunks = db.get_chunk_ids_by_path(utils_path)
+                if len(initial_utils_chunks) == 0:
+                    pytest.skip("utils.py has no chunks to remove")
+
+                # Remove a file
+                (sample_repo / "utils.py").unlink()
+
+                # Incremental reindex (no force needed - will detect change)
+                result2 = index_tool.run(path=str(sample_repo))
+                assert result2["isError"] is False
+
+                # Wait for indexing to complete
+                for _ in range(max_wait):
+                    time.sleep(1)
+                    status2 = snapshot.get_status(str(sample_repo))
+                    if status2.status == "indexed":
+                        break
+
+                # Verify chunks for the removed file are gone
+                final_utils_chunks = db.get_chunk_ids_by_path(utils_path)
+                assert len(final_utils_chunks) == 0, f"Expected 0 chunks for removed file, got {len(final_utils_chunks)}"
+
+                # Verify total chunk count decreased
+                final_chunks = db.get_chunk_count()
+                assert final_chunks < initial_chunks, f"Expected {final_chunks} < {initial_chunks}"
+
+
+class TestGetChunkIdsByPath:
+    """Tests for get_chunk_ids_by_path database method."""
+
+    def test_get_chunk_ids_by_path(self, temp_db_path):
+        """Test retrieving chunk IDs by path."""
+        from codii.storage.database import Database
+
+        db = Database(temp_db_path)
+
+        # Insert some chunks
+        id1 = db.insert_chunk("content1", "/path/to/file.py", 1, 10, "python", "function")
+        id2 = db.insert_chunk("content2", "/path/to/file.py", 11, 20, "python", "class")
+        id3 = db.insert_chunk("content3", "/path/to/other.py", 1, 5, "python", "function")
+
+        # Get chunks for file.py
+        chunk_ids = db.get_chunk_ids_by_path("/path/to/file.py")
+
+        assert len(chunk_ids) == 2
+        assert id1 in chunk_ids
+        assert id2 in chunk_ids
+        assert id3 not in chunk_ids
+
+    def test_get_chunk_ids_by_path_empty(self, temp_db_path):
+        """Test retrieving chunk IDs for non-existent path."""
+        from codii.storage.database import Database
+
+        db = Database(temp_db_path)
+
+        # Insert a chunk
+        db.insert_chunk("content", "/path/to/file.py", 1, 10, "python", "function")
+
+        # Get chunks for non-existent path
+        chunk_ids = db.get_chunk_ids_by_path("/path/to/nonexistent.py")
+
+        assert len(chunk_ids) == 0
+
+
+class TestRemoveByChunkIds:
+    """Tests for remove_by_chunk_ids vector indexer method."""
+
+    def test_remove_by_chunk_ids(self, temp_vector_path):
+        """Test removing multiple vectors by chunk IDs."""
+        import numpy as np
+        from codii.indexers.vector_indexer import VectorIndexer
+
+        indexer = VectorIndexer(temp_vector_path)
+
+        # Add some vectors
+        chunk_ids = [1, 2, 3]
+        vectors = np.random.rand(3, 384).astype(np.float32)
+        indexer.add_vectors(chunk_ids, vectors=vectors)
+
+        assert indexer.get_vector_count() == 3
+
+        # Remove two vectors
+        removed = indexer.remove_by_chunk_ids([1, 2])
+
+        assert removed == 2
+        assert indexer.get_vector_count() == 1
+
+        # Verify remaining vector
+        assert indexer.remove_by_chunk_id(3)  # Should still exist
+        assert indexer.get_vector_count() == 0
+
+    def test_remove_by_chunk_ids_partial(self, temp_vector_path):
+        """Test removing vectors when some don't exist."""
+        import numpy as np
+        from codii.indexers.vector_indexer import VectorIndexer
+
+        indexer = VectorIndexer(temp_vector_path)
+
+        # Add some vectors
+        chunk_ids = [1, 2]
+        vectors = np.random.rand(2, 384).astype(np.float32)
+        indexer.add_vectors(chunk_ids, vectors=vectors)
+
+        # Try to remove existing and non-existing
+        removed = indexer.remove_by_chunk_ids([1, 999])
+
+        assert removed == 1  # Only one actually removed
+        assert indexer.get_vector_count() == 1

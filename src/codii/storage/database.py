@@ -234,6 +234,14 @@ class Database:
         cursor = self.conn.execute("SELECT id FROM chunks")
         return [row["id"] for row in cursor.fetchall()]
 
+    def get_chunk_ids_by_path(self, path: str) -> List[int]:
+        """Get all chunk IDs for a given file path."""
+        cursor = self.conn.execute(
+            "SELECT id FROM chunks WHERE path = ?",
+            (path,),
+        )
+        return [row["id"] for row in cursor.fetchall()]
+
     def delete_chunks_by_path(self, path: str) -> int:
         """Delete all chunks for a given path."""
         cursor = self.conn.execute(

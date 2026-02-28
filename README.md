@@ -68,6 +68,7 @@ graph TB
 sequenceDiagram
     participant C as MCP Client
     participant S as Codii Server
+    participant MK as Merkle Tree
     participant CH as AST Chunker
     participant EM as Embedder
     participant BM25 as BM25 Index
@@ -77,20 +78,47 @@ sequenceDiagram
     Note over C,FS: Indexing Flow
     C->>S: index_codebase(path)
     S->>FS: Scan directory
-    S->>S: Build Merkle tree
-    S-->>C: Indexing started (async)
+    S->>MK: Build new Merkle tree
+    S->>MK: Compare with old tree (if exists)
 
-    loop For each file
-        FS->>CH: File content
-        CH->>CH: Parse AST
-        CH->>CH: Extract chunks
-        CH->>BM25: Store chunks
-        CH->>EM: Get embeddings
-        EM->>VEC: Store vectors
+    alt No changes detected
+        S-->>C: Already indexed, no changes
+    else Changes detected (incremental)
+        S-->>C: Indexing started (async)
+
+        Note over S,VEC: DELETE phase - removed/modified files
+        loop For each removed/modified file
+            S->>BM25: Delete chunks by path
+            S->>VEC: Remove vectors by chunk IDs
+        end
+
+        Note over S,VEC: ADD phase - added/modified files
+        loop For each added/modified file
+            FS->>CH: File content
+            CH->>CH: Parse AST
+            CH->>CH: Extract chunks
+            CH->>BM25: Store chunks
+            CH->>EM: Get embeddings
+            EM->>VEC: Store vectors
+        end
+
+        S->>S: Save snapshot
+        S->>MK: Save Merkle tree
+    else New codebase (full index)
+        S-->>C: Indexing started (async)
+
+        loop For each file
+            FS->>CH: File content
+            CH->>CH: Parse AST
+            CH->>CH: Extract chunks
+            CH->>BM25: Store chunks
+            CH->>EM: Get embeddings
+            EM->>VEC: Store vectors
+        end
+
+        S->>S: Save snapshot
+        S->>MK: Save Merkle tree
     end
-
-    S->>S: Save snapshot
-    S->>S: Save Merkle tree
 
     Note over C,FS: Search Flow
     C->>S: search_code(query)
@@ -105,7 +133,7 @@ sequenceDiagram
 - **Hybrid Search**: Combines BM25 (SQLite FTS5) and vector search (HNSW) for optimal code retrieval
 - **Smart Query Processing**: Multi-word queries are optimized with OR-matching, wildcards, code tokenization, and abbreviation expansion for better recall
 - **AST-Aware Chunking**: Uses tree-sitter for semantic code splitting (functions, classes, etc.)
-- **Incremental Updates**: Merkle tree-based change detection for efficient re-indexing
+- **Incremental Updates**: Merkle tree-based change detection for efficient re-indexing - only processes added, modified, or removed files instead of re-indexing everything
 - **Local Embeddings**: CPU-runnable all-MiniLM-L6-v2 model for vector embeddings
 - **Multi-Language Support**: Python, JavaScript, TypeScript, Go, Rust, Java, C/C++
 - **Gitignore Support**: Automatically respects `.gitignore` patterns when indexing
@@ -229,17 +257,25 @@ python -m codii.server
 
 #### `index_codebase`
 
-Index a codebase for semantic search.
+Index a codebase for semantic search. Automatically detects file changes and performs incremental updates (only processes added/modified/removed files).
 
 ```python
 {
     "path": "/path/to/repo",        # Required: Absolute path
-    "force": false,                  # Optional: Force re-index
+    "force": false,                  # Optional: Force full re-index (clears existing index)
     "splitter": "ast",               # Optional: "ast" or "langchain"
     "customExtensions": [".md"],     # Optional: Additional extensions
     "ignorePatterns": ["tests/"]     # Optional: Additional ignore patterns
 }
 ```
+
+**Behavior:**
+- New codebase → Full index
+- Already indexed + no file changes → Returns "No changes detected"
+- Already indexed + file changes detected → Incremental update (only processes changed files)
+- `force=true` → Clears existing index and performs full re-index
+
+Use `force=true` only for recovery from corrupted indexes or when you want to reset the index completely.
 
 #### `search_code`
 

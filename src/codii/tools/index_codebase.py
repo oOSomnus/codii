@@ -17,7 +17,14 @@ from ..merkle.tree import MerkleTree
 
 
 class IndexCodebaseTool:
-    """Tool to index a codebase."""
+    """Tool to index a codebase with incremental update support.
+
+    Behavior:
+    - New codebase: Performs full index
+    - Already indexed + no changes: Returns early with "no changes detected"
+    - Already indexed + changes detected: Performs incremental update (only processes changed files)
+    - force=true: Clears existing index and performs full re-index
+    """
 
     def __init__(self):
         self.config = get_config()
@@ -36,7 +43,7 @@ class IndexCodebaseTool:
                 "force": {
                     "type": "boolean",
                     "default": False,
-                    "description": "Force re-indexing even if already indexed",
+                    "description": "Force full re-index by clearing existing index. Use only for recovery from corrupted indexes or when you want to reset completely. Normal indexing automatically detects changes and performs incremental updates.",
                 },
                 "splitter": {
                     "type": "string",
@@ -64,14 +71,22 @@ class IndexCodebaseTool:
             customExtensions: Optional[List[str]] = None,
             ignorePatterns: Optional[List[str]] = None) -> dict:
         """
-        Index a codebase.
+        Index a codebase with automatic incremental update support.
+
+        Behavior:
+        - New codebase: Performs full index
+        - Already indexed + no changes: Returns early with "no changes detected"
+        - Already indexed + changes detected: Performs incremental update
+          (only processes added, modified, or removed files)
+        - force=True: Clears existing index and performs full re-index
 
         Args:
             path: Absolute path to the codebase
-            force: Force re-indexing
-            splitter: Code splitting method
-            customExtensions: Additional file extensions
-            ignorePatterns: Additional ignore patterns
+            force: Force full re-index by clearing existing index. Use only for
+                   recovery or reset. Normal calls auto-detect changes.
+            splitter: Code splitting method ("ast" or "langchain")
+            customExtensions: Additional file extensions to index
+            ignorePatterns: Additional patterns to ignore
 
         Returns:
             Dict with result message or error
@@ -100,16 +115,61 @@ class IndexCodebaseTool:
 
         # Check if force or needs re-indexing
         status = self.snapshot_manager.get_status(path_str)
-        if status.status == "indexed" and not force:
-            return {
-                "content": [{
-                    "type": "text",
-                    "text": f"Codebase already indexed at {path}. Use force=true to re-index."
-                }],
-                "isError": False,
-            }
 
-        # Clear existing index if force
+        # For incremental indexing, we need to check if there are changes
+        # even when already indexed (unless force=True which does full re-index)
+        if status.status == "indexed" and not force:
+            # Check if there are any file changes for incremental update
+            path_hash = self.snapshot_manager.path_to_hash(path_str)
+            merkle_path = self.config.merkle_dir / f"{path_hash}.json"
+            old_merkle = MerkleTree.load(merkle_path)
+
+            if old_merkle:
+                # Quick check: scan files and compare with old merkle tree
+                normalized_extensions = []
+                for ext in (customExtensions or []):
+                    if ext and not ext.startswith("."):
+                        normalized_extensions.append("." + ext)
+                    else:
+                        normalized_extensions.append(ext)
+
+                extensions = set(self.config.default_extensions)
+                files = scan_directory(
+                    repo_path,
+                    extensions,
+                    self.config.default_ignore_patterns,
+                    normalized_extensions,
+                    ignorePatterns or [],
+                    use_gitignore=True,
+                )
+
+                # Build new Merkle tree for comparison
+                new_merkle = MerkleTree()
+                for file_path, file_hash in files:
+                    new_merkle.add_file(str(file_path), file_hash)
+                new_merkle.compute_root()
+
+                # If no changes, return early
+                if new_merkle.root_hash == old_merkle.root_hash:
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": f"Codebase already indexed at {path}. No changes detected. Use force=true to re-index."
+                        }],
+                        "isError": False,
+                    }
+                # Otherwise, proceed with incremental indexing (don't return early)
+            else:
+                # No merkle tree, need to re-index
+                return {
+                    "content": [{
+                        "type": "text",
+                        "text": f"Codebase already indexed at {path}. Use force=true to re-index."
+                    }],
+                    "isError": False,
+                }
+
+        # Clear existing index if force (full re-index)
         if force and status.status == "indexed":
             self._clear_index(path_str)
 
@@ -138,7 +198,11 @@ class IndexCodebaseTool:
         ignore_patterns: List[str],
         force: bool = False,
     ) -> None:
-        """Perform the actual indexing (runs in background thread)."""
+        """Perform the actual indexing (runs in background thread).
+
+        Supports incremental updates: only processes files that have been
+        added, removed, or modified since the last index.
+        """
         try:
             # Mark as indexing
             self.snapshot_manager.mark_indexing(path)
@@ -196,18 +260,49 @@ class IndexCodebaseTool:
 
             new_merkle.compute_root()
 
-            # Check for changes if old tree exists
+            # Compute diff for incremental updates
             if old_merkle and not force:
                 added, removed, modified = new_merkle.diff(old_merkle)
-                # For now, just re-index everything if there are changes
-                # A more sophisticated approach would handle incremental updates
             else:
+                # Force re-index or new codebase: treat all files as added
                 added = set(str(f) for f, _ in files)
                 removed = set()
                 modified = set()
 
-            # Stage 2: Chunking (10-30%)
-            self.snapshot_manager.update_progress(path, 15, "chunking", 0, 0)
+            files_to_delete = removed | modified
+            files_to_add = added | modified
+
+            # Early exit if no changes
+            if not files_to_delete and not files_to_add:
+                self.snapshot_manager.mark_indexed(
+                    path,
+                    new_merkle.root_hash,
+                    len(files),
+                    db.get_chunk_count(),
+                )
+                return
+
+            # Stage 2: Deletion (10-20%) - Remove stale chunks and vectors
+            if files_to_delete:
+                self.snapshot_manager.update_progress(
+                    path, 15, "deleting", len(files), 0
+                )
+
+                for file_path in files_to_delete:
+                    # Get chunk IDs before deleting from database
+                    chunk_ids = db.get_chunk_ids_by_path(file_path)
+                    # Remove vectors from HNSW index (soft delete)
+                    if chunk_ids:
+                        vector_indexer.remove_by_chunk_ids(chunk_ids)
+                    # Delete chunks from SQLite (FTS cleanup via trigger)
+                    db.delete_chunks_by_path(file_path)
+
+                self.snapshot_manager.update_progress(path, 20, "deleting", len(files), 0)
+
+            # Stage 3: Chunking (20-40%) - Only process files to add
+            self.snapshot_manager.update_progress(
+                path, 20, "chunking", 0, 0
+            )
 
             chunker = ASTChunker() if splitter == "ast" else TextChunker(
                 max_chunk_size=self.config.max_chunk_size,
@@ -215,9 +310,11 @@ class IndexCodebaseTool:
             )
 
             all_chunks = []
-            total_files = len(files)
+            files_to_add_list = list(files_to_add)
+            total_files_to_add = len(files_to_add_list)
 
-            for i, (file_path, file_hash) in enumerate(files):
+            for i, file_path_str in enumerate(files_to_add_list):
+                file_path = Path(file_path_str)
                 content = get_file_content(file_path)
                 if content is None:
                     continue
@@ -233,13 +330,16 @@ class IndexCodebaseTool:
                 all_chunks.extend(chunks)
 
                 # Update progress
-                progress = 15 + int((i / total_files) * 15)
-                self.snapshot_manager.update_progress(
-                    path, progress, "chunking", i + 1, len(all_chunks)
-                )
+                if total_files_to_add > 0:
+                    progress = 20 + int((i / total_files_to_add) * 20)
+                    self.snapshot_manager.update_progress(
+                        path, progress, "chunking", i + 1, len(all_chunks)
+                    )
 
-            # Stage 3: Embedding (30-80%)
-            self.snapshot_manager.update_progress(path, 30, "embedding", len(files), len(all_chunks))
+            # Stage 4: Embedding (40-80%)
+            self.snapshot_manager.update_progress(
+                path, 40, "embedding", len(files_to_add_list), len(all_chunks)
+            )
 
             if all_chunks:
                 # Batch embed
@@ -257,31 +357,34 @@ class IndexCodebaseTool:
                     all_vectors.append(vectors)
 
                     # Update progress
-                    progress = 30 + int((batch_idx / total_batches) * 50)
+                    progress = 40 + int((batch_idx / total_batches) * 40)
                     self.snapshot_manager.update_progress(
-                        path, progress, "embedding", len(files), len(all_chunks)
+                        path, progress, "embedding", len(files_to_add_list), len(all_chunks)
                     )
 
                 # Combine all vectors
                 import numpy as np
                 all_vectors = np.vstack(all_vectors)
 
-                # Stage 4: Indexing (80-100%)
-                self.snapshot_manager.update_progress(path, 80, "indexing", len(files), len(all_chunks))
+                # Stage 5: Indexing (80-100%)
+                self.snapshot_manager.update_progress(
+                    path, 80, "indexing", len(files_to_add_list), len(all_chunks)
+                )
 
                 # Add chunks to BM25
                 bm25_indexer.add_chunks(all_chunks)
 
                 # Update progress
-                self.snapshot_manager.update_progress(path, 90, "indexing", len(files), len(all_chunks))
+                self.snapshot_manager.update_progress(
+                    path, 90, "indexing", len(files_to_add_list), len(all_chunks)
+                )
 
-                # Add vectors to HNSW
-                chunk_ids = list(range(1, len(all_chunks) + 1))  # IDs start at 1
-                # Get actual IDs from database
-                chunk_ids = bm25_indexer.get_all_chunk_ids()
+                # Get the newly inserted chunk IDs (last N IDs)
+                all_chunk_ids = bm25_indexer.get_all_chunk_ids()
+                new_chunk_ids = all_chunk_ids[-len(all_chunks):]
 
-                if len(chunk_ids) == len(all_vectors):
-                    vector_indexer.add_vectors(chunk_ids, vectors=all_vectors)
+                if len(new_chunk_ids) == len(all_vectors):
+                    vector_indexer.add_vectors(new_chunk_ids, vectors=all_vectors)
 
                 # Save vector index
                 vector_indexer.save()
@@ -294,7 +397,7 @@ class IndexCodebaseTool:
                 path,
                 new_merkle.root_hash,
                 len(files),
-                len(all_chunks),
+                db.get_chunk_count(),
             )
 
         except Exception as e:

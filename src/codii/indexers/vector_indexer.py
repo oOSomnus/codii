@@ -201,6 +201,22 @@ class VectorIndexer:
         del self._reverse_mapping[chunk_id]
         return True
 
+    def remove_by_chunk_ids(self, chunk_ids: List[int]) -> int:
+        """
+        Remove multiple vectors by chunk IDs.
+
+        Args:
+            chunk_ids: List of chunk IDs to remove
+
+        Returns:
+            Number of vectors successfully removed
+        """
+        removed = 0
+        for chunk_id in chunk_ids:
+            if self.remove_by_chunk_id(chunk_id):
+                removed += 1
+        return removed
+
     def save(self) -> None:
         """Save the index and metadata to disk."""
         self.index.save_index(str(self.index_path.with_suffix(".bin")))

@@ -48,6 +48,13 @@ The codebase follows a strict layered architecture where dependencies flow downw
 
 **Background Indexing**: `index_codebase` runs indexing in a background thread. Progress is tracked via `SnapshotManager` in `~/.codii/snapshots/snapshot.json`. Check status with `get_indexing_status`.
 
+**Incremental Indexing**: Re-indexing automatically detects changes via Merkle tree comparison:
+- Only processes files that are added, modified, or removed
+- DELETE phase: Removes stale chunks from SQLite and vectors from HNSW (soft delete)
+- ADD phase: Only chunks and embeds new/modified files
+- Early exit if no changes detected
+- Use `force=true` to trigger a full re-index
+
 **Hybrid Search**: Uses Reciprocal Rank Fusion (RRF) to combine BM25 and vector search results. See `hybrid_search.py:_reciprocal_rank_fusion()`.
 
 **Query Preprocessing**: Multi-word queries are preprocessed for better recall:
