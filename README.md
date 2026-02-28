@@ -182,6 +182,130 @@ Clear an indexed codebase.
 }
 ```
 
+## MCP Client Integration
+
+Codii can be integrated with various MCP clients. Below are configuration examples for popular clients.
+
+### Claude Code
+
+**Quick setup:**
+```bash
+claude mcp add codii -- uvx codii
+```
+
+**Manual configuration** (`~/.claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "codii": {
+      "command": "uvx",
+      "args": ["codii"]
+    }
+  }
+}
+```
+
+For local development:
+```json
+{
+  "mcpServers": {
+    "codii": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/codii", "codii"]
+    }
+  }
+}
+```
+
+### OpenAI Codex CLI
+
+**Configuration** (`~/.codex/config.toml`):
+```toml
+[mcp_servers.codii]
+command = "uvx"
+args = ["codii"]
+
+# Optional: Increase timeout for first-time embedding model load
+startup_timeout_ms = 30000
+```
+
+### Gemini CLI
+
+**Configuration** (`~/.gemini/settings.json`):
+```json
+{
+  "mcpServers": {
+    "codii": {
+      "command": "uvx",
+      "args": ["codii"]
+    }
+  }
+}
+```
+
+### Qwen Code
+
+**Configuration** (`~/.qwen/settings.json`):
+```json
+{
+  "mcpServers": {
+    "codii": {
+      "command": "uvx",
+      "args": ["codii"]
+    }
+  }
+}
+```
+
+### Other MCP Clients
+
+For clients that support stdio-based MCP servers, use the generic configuration pattern:
+
+```json
+{
+  "mcpServers": {
+    "codii": {
+      "command": "uvx",
+      "args": ["codii"]
+    }
+  }
+}
+```
+
+Or with a local installation:
+```json
+{
+  "mcpServers": {
+    "codii": {
+      "command": "uv",
+      "args": ["run", "codii"]
+    }
+  }
+}
+```
+
+### Custom Storage Location
+
+To use a custom storage location, set the `CODII_BASE_DIR` environment variable:
+
+```json
+{
+  "mcpServers": {
+    "codii": {
+      "command": "uvx",
+      "args": ["codii"],
+      "env": {
+        "CODII_BASE_DIR": "/custom/storage/path"
+      }
+    }
+  }
+}
+```
+
+### First Run Note
+
+On first run, the embedding model (`all-MiniLM-L6-v2`) will be downloaded, which may take a few minutes. Some MCP clients may need an increased startup timeout (e.g., `startup_timeout_ms: 30000`) to accommodate this initial load.
+
 ## Storage
 
 All index data is stored in `~/.codii/`:
