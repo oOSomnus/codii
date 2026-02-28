@@ -107,6 +107,7 @@ sequenceDiagram
 - **Incremental Updates**: Merkle tree-based change detection for efficient re-indexing
 - **Local Embeddings**: CPU-runnable all-MiniLM-L6-v2 model for vector embeddings
 - **Multi-Language Support**: Python, JavaScript, TypeScript, Go, Rust, Java, C/C++
+- **Gitignore Support**: Automatically respects `.gitignore` patterns when indexing
 
 ## Installation
 

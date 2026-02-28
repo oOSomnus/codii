@@ -176,6 +176,7 @@ class IndexCodebaseTool:
                 self.config.default_ignore_patterns,
                 normalized_extensions,
                 ignore_patterns,
+                use_gitignore=True,
             )
 
             self.snapshot_manager.update_progress(path, 10, "preparing", len(files), 0)

@@ -52,6 +52,8 @@ The codebase follows a strict layered architecture where dependencies flow downw
 
 **Codebase Isolation**: Each codebase gets its own index directory under `~/.codii/indexes/<hash-of-path>/`. The path hash is computed via SHA-256.
 
+**Automatic Gitignore**: The `scan_directory` function automatically reads and applies `.gitignore` patterns from the repository root. Combined with default ignore patterns from config.
+
 ### Tree-Sitter Integration
 
 The AST chunker (`chunkers/ast_chunker.py`) uses tree-sitter with language-specific grammars:

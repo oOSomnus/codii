@@ -7,6 +7,36 @@ from typing import List, Optional, Set, Tuple
 import pathspec
 
 
+def read_gitignore(root_path: Path) -> List[str]:
+    """
+    Read .gitignore patterns from the specified directory.
+
+    Args:
+        root_path: Path to the directory containing .gitignore
+
+    Returns:
+        List of gitignore patterns, empty if file doesn't exist
+    """
+    gitignore_path = root_path / ".gitignore"
+    if not gitignore_path.exists():
+        return []
+
+    try:
+        with open(gitignore_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+
+        patterns = []
+        for line in lines:
+            # Strip whitespace and skip empty lines and comments
+            line = line.strip()
+            if line and not line.startswith("#"):
+                patterns.append(line)
+
+        return patterns
+    except (PermissionError, OSError):
+        return []
+
+
 def compute_file_hash(file_path: Path, chunk_size: int = 8192) -> str:
     """Compute SHA-256 hash of a file."""
     sha256 = hashlib.sha256()
@@ -58,9 +88,18 @@ def scan_directory(
     ignore_patterns: List[str],
     custom_extensions: Optional[List[str]] = None,
     custom_ignore: Optional[List[str]] = None,
+    use_gitignore: bool = True,
 ) -> List[Tuple[Path, str]]:
     """
     Scan a directory for files to index.
+
+    Args:
+        root_path: Root directory to scan
+        extensions: Set of file extensions to include
+        ignore_patterns: Default ignore patterns
+        custom_extensions: Additional extensions to include
+        custom_ignore: Additional patterns to ignore
+        use_gitignore: Whether to read and apply .gitignore patterns
 
     Returns:
         List of (file_path, file_hash) tuples
@@ -71,6 +110,11 @@ def scan_directory(
     all_ignore = list(ignore_patterns)
     if custom_ignore:
         all_ignore.extend(custom_ignore)
+
+    # Add .gitignore patterns if enabled
+    if use_gitignore:
+        gitignore_patterns = read_gitignore(root_path)
+        all_ignore.extend(gitignore_patterns)
 
     # Create pathspec for ignore patterns
     ignore_spec = pathspec.PathSpec.from_lines(
