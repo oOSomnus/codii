@@ -135,9 +135,11 @@ apk add python3-dev gcc g++ musl-dev
 
 ## Installation
 
-### Option 1: pipx (Recommended)
+### Option 1: pipx or uv tool (Recommended)
 
-Best for CLI tools - provides automatic isolation and easy management.
+Both pipx and uv tool provide isolated environments for CLI tools. Use whichever you prefer.
+
+**Using pipx:**
 
 ```bash
 # Install directly from GitHub
@@ -147,6 +149,18 @@ pipx install git+https://github.com/oOSomnus/Codii.git
 git clone https://github.com/oOSomnus/Codii.git
 cd codii
 pipx install .
+```
+
+**Using uv tool:**
+
+```bash
+# Install directly from GitHub
+uv tool install git+https://github.com/oOSomnus/Codii.git
+
+# Or install from local clone
+git clone https://github.com/oOSomnus/Codii.git
+cd codii
+uv tool install .
 ```
 
 ### Option 2: pip with venv
@@ -161,9 +175,9 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-### Option 3: uv
+### Option 3: uv pip (Development)
 
-For users who already use uv.
+For development or users who already use uv and want an editable install.
 
 ```bash
 git clone https://github.com/oOSomnus/Codii.git
@@ -177,7 +191,10 @@ uv pip install -e .
 # If installed with pipx
 pipx uninstall codii
 
-# If installed with pip/uv
+# If installed with uv tool
+uv tool uninstall codii
+
+# If installed with pip/uv pip
 pip uninstall codii
 
 # Remove Claude Code integration
