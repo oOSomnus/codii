@@ -243,7 +243,10 @@ class IndexCodebaseTool:
                 use_gitignore=True,
             )
 
-            self.snapshot_manager.update_progress(path, 10, "preparing", len(files), 0)
+            total_files = len(files)
+            self.snapshot_manager.update_progress(
+                path, 10, "preparing", 0, 0, total_files, 0
+            )
 
             if not files:
                 self.snapshot_manager.mark_failed(path, "No files found to index", 10)
@@ -271,6 +274,7 @@ class IndexCodebaseTool:
 
             files_to_delete = removed | modified
             files_to_add = added | modified
+            files_to_process = len(files_to_add)
 
             # Early exit if no changes
             if not files_to_delete and not files_to_add:
@@ -285,7 +289,7 @@ class IndexCodebaseTool:
             # Stage 2: Deletion (10-20%) - Remove stale chunks and vectors
             if files_to_delete:
                 self.snapshot_manager.update_progress(
-                    path, 15, "deleting", len(files), 0
+                    path, 15, "deleting", 0, 0, total_files, files_to_process
                 )
 
                 for file_path in files_to_delete:
@@ -297,11 +301,13 @@ class IndexCodebaseTool:
                     # Delete chunks from SQLite (FTS cleanup via trigger)
                     db.delete_chunks_by_path(file_path)
 
-                self.snapshot_manager.update_progress(path, 20, "deleting", len(files), 0)
+                self.snapshot_manager.update_progress(
+                    path, 20, "deleting", 0, 0, total_files, files_to_process
+                )
 
             # Stage 3: Chunking (20-40%) - Only process files to add
             self.snapshot_manager.update_progress(
-                path, 20, "chunking", 0, 0
+                path, 20, "chunking", 0, 0, total_files, files_to_process
             )
 
             chunker = ASTChunker() if splitter == "ast" else TextChunker(
@@ -333,12 +339,12 @@ class IndexCodebaseTool:
                 if total_files_to_add > 0:
                     progress = 20 + int((i / total_files_to_add) * 20)
                     self.snapshot_manager.update_progress(
-                        path, progress, "chunking", i + 1, len(all_chunks)
+                        path, progress, "chunking", i + 1, len(all_chunks), total_files, files_to_process
                     )
 
             # Stage 4: Embedding (40-80%)
             self.snapshot_manager.update_progress(
-                path, 40, "embedding", len(files_to_add_list), len(all_chunks)
+                path, 40, "embedding", len(files_to_add_list), len(all_chunks), total_files, files_to_process
             )
 
             if all_chunks:
@@ -359,7 +365,7 @@ class IndexCodebaseTool:
                     # Update progress
                     progress = 40 + int((batch_idx / total_batches) * 40)
                     self.snapshot_manager.update_progress(
-                        path, progress, "embedding", len(files_to_add_list), len(all_chunks)
+                        path, progress, "embedding", len(files_to_add_list), len(all_chunks), total_files, files_to_process
                     )
 
                 # Combine all vectors
@@ -368,7 +374,7 @@ class IndexCodebaseTool:
 
                 # Stage 5: Indexing (80-100%)
                 self.snapshot_manager.update_progress(
-                    path, 80, "indexing", len(files_to_add_list), len(all_chunks)
+                    path, 80, "indexing", len(files_to_add_list), len(all_chunks), total_files, files_to_process
                 )
 
                 # Add chunks to BM25
@@ -376,7 +382,7 @@ class IndexCodebaseTool:
 
                 # Update progress
                 self.snapshot_manager.update_progress(
-                    path, 90, "indexing", len(files_to_add_list), len(all_chunks)
+                    path, 90, "indexing", len(files_to_add_list), len(all_chunks), total_files, files_to_process
                 )
 
                 # Get the newly inserted chunk IDs (last N IDs)

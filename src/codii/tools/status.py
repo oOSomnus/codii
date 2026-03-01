@@ -53,11 +53,22 @@ class GetIndexingStatusTool:
             )
         elif status.status == "indexing":
             stage_display = status.current_stage or "unknown"
+            # Build files processed message with context
+            if status.files_to_process > 0 and status.files_to_process != status.total_files:
+                # Incremental update context
+                files_msg = f"{status.indexed_files} of {status.files_to_process} changed ({status.total_files} total)"
+            elif status.total_files > 0:
+                # Full index context
+                files_msg = f"{status.indexed_files} of {status.total_files}"
+            else:
+                # Fallback without context
+                files_msg = str(status.indexed_files)
+
             message = (
                 f"Indexing in progress.\n"
                 f"  Progress: {status.progress}%\n"
                 f"  Stage: {stage_display}\n"
-                f"  Files processed: {status.indexed_files}\n"
+                f"  Files processed: {files_msg}\n"
                 f"  Chunks created: {status.total_chunks}"
             )
         elif status.status == "failed":

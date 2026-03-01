@@ -100,7 +100,17 @@ def status(
     elif status_info.status == "indexing":
         lines.append(f"[bold]Progress:[/bold] {status_info.progress}%")
         lines.append(f"[bold]Stage:[/bold] {status_info.current_stage}")
-        lines.append(f"[bold]Files:[/bold] {status_info.indexed_files}")
+        # Build files processed message with context
+        if status_info.files_to_process > 0 and status_info.files_to_process != status_info.total_files:
+            # Incremental update context
+            files_msg = f"{status_info.indexed_files} of {status_info.files_to_process} changed ({status_info.total_files} total)"
+        elif status_info.total_files > 0:
+            # Full index context
+            files_msg = f"{status_info.indexed_files} of {status_info.total_files}"
+        else:
+            # Fallback without context
+            files_msg = str(status_info.indexed_files)
+        lines.append(f"[bold]Files:[/bold] {files_msg}")
         lines.append(f"[bold]Chunks:[/bold] {status_info.total_chunks}")
 
     elif status_info.status == "failed":

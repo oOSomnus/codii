@@ -22,6 +22,9 @@ class CodebaseStatus:
     total_chunks: int = 0
     last_updated: Optional[str] = None
     error_message: Optional[str] = None
+    # New fields for better progress context
+    total_files: int = 0  # Total files in codebase
+    files_to_process: int = 0  # Files being processed in this update (for incremental context)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -95,8 +98,20 @@ class SnapshotManager:
         stage: str,
         indexed_files: int = 0,
         total_chunks: int = 0,
+        total_files: int = 0,
+        files_to_process: int = 0,
     ) -> None:
-        """Update indexing progress."""
+        """Update indexing progress.
+
+        Args:
+            path: Codebase path
+            progress: Progress percentage (0-100)
+            stage: Current stage name
+            indexed_files: Number of files processed so far
+            total_chunks: Number of chunks created so far
+            total_files: Total files in codebase
+            files_to_process: Files being processed in this update (for incremental context)
+        """
         with self._lock:
             snapshot = self._read_snapshot()
             codebases = snapshot.setdefault("codebases", {})
@@ -106,6 +121,8 @@ class SnapshotManager:
                 codebases[path]["current_stage"] = stage
                 codebases[path]["indexed_files"] = indexed_files
                 codebases[path]["total_chunks"] = total_chunks
+                codebases[path]["total_files"] = total_files
+                codebases[path]["files_to_process"] = files_to_process
                 codebases[path]["last_updated"] = datetime.now().isoformat()
             else:
                 codebases[path] = CodebaseStatus(
@@ -115,6 +132,8 @@ class SnapshotManager:
                     current_stage=stage,
                     indexed_files=indexed_files,
                     total_chunks=total_chunks,
+                    total_files=total_files,
+                    files_to_process=files_to_process,
                 ).to_dict()
 
             self._write_snapshot(snapshot)
