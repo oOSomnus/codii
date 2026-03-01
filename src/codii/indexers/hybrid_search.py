@@ -22,6 +22,7 @@ class SearchResult:
     bm25_score: float = 0.0
     vector_score: float = 0.0
     combined_score: float = 0.0
+    rerank_score: float = 0.0
     rank: int = 0
 
 
@@ -54,6 +55,7 @@ class HybridSearch:
         query: str,
         limit: int = 10,
         path_filter: Optional[str] = None,
+        rerank: Optional[bool] = None,
     ) -> List[SearchResult]:
         """
         Perform hybrid search using Reciprocal Rank Fusion.
@@ -62,25 +64,36 @@ class HybridSearch:
             query: Search query
             limit: Maximum number of results
             path_filter: Optional path filter
+            rerank: Override config setting for re-ranking (None uses config)
 
         Returns:
-            List of SearchResult objects ranked by combined RRF score
+            List of SearchResult objects ranked by combined RRF score,
+            or re-ranked by cross-encoder if enabled.
         """
         config = get_config()
         bm25_weight = self.bm25_weight or config.bm25_weight
         vector_weight = self.vector_weight or config.vector_weight
 
+        # Determine if re-ranking is enabled
+        use_rerank = config.rerank_enabled if rerank is None else rerank
+
+        # Determine number of candidates to retrieve
+        if use_rerank:
+            candidates_count = config.rerank_candidates
+        else:
+            candidates_count = min(limit * 2, 50)
+
         # Get BM25 results
         bm25_results = self.bm25_indexer.search(
             query,
-            limit=min(limit * 2, 50),  # Get more results for RRF
+            limit=candidates_count,
             path_filter=path_filter,
         )
 
         # Get vector results
         vector_results = self.vector_indexer.search(
             query,
-            k=min(limit * 2, 50),
+            k=candidates_count,
         )
 
         # Combine using Reciprocal Rank Fusion
@@ -91,15 +104,45 @@ class HybridSearch:
             vector_weight,
         )
 
-        # Sort by combined score and limit
-        results.sort(key=lambda x: x.combined_score, reverse=True)
-        results = results[:limit]
+        # Apply re-ranking if enabled
+        if use_rerank and results:
+            results = self._rerank_results(query, results, limit, config)
+        else:
+            # Sort by combined score and limit
+            results.sort(key=lambda x: x.combined_score, reverse=True)
+            results = results[:limit]
 
         # Add rank
         for i, result in enumerate(results, 1):
             result.rank = i
 
         return results
+
+    def _rerank_results(
+        self,
+        query: str,
+        candidates: List[SearchResult],
+        top_k: int,
+        config,
+    ) -> List[SearchResult]:
+        """Apply cross-encoder re-ranking to candidates."""
+        try:
+            from ..embedding.cross_encoder import get_cross_encoder
+
+            cross_encoder = get_cross_encoder(config.rerank_model)
+            results = cross_encoder.rerank(
+                query,
+                candidates,
+                top_k=top_k,
+                threshold=config.rerank_threshold,
+            )
+            return results
+        except Exception as e:
+            # Fall back to RRF-only results if re-ranking fails
+            import sys
+            print(f"Warning: Re-ranking failed, falling back to RRF: {e}", file=sys.stderr)
+            candidates.sort(key=lambda x: x.combined_score, reverse=True)
+            return candidates[:top_k]
 
     def _reciprocal_rank_fusion(
         self,

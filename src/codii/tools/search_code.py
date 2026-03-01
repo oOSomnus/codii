@@ -40,6 +40,11 @@ class SearchCodeTool:
                     "default": [],
                     "description": "Filter by file extensions (e.g., ['.py', '.js'])",
                 },
+                "rerank": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Enable cross-encoder re-ranking for improved relevance (default: true)",
+                },
             },
             "required": ["path", "query"],
         }
@@ -50,6 +55,7 @@ class SearchCodeTool:
         query: str,
         limit: int = 10,
         extensionFilter: Optional[List[str]] = None,
+        rerank: Optional[bool] = None,
     ) -> dict:
         """
         Search indexed code.
@@ -59,6 +65,7 @@ class SearchCodeTool:
             query: Search query
             limit: Maximum number of results (max 50)
             extensionFilter: Filter by file extensions
+            rerank: Enable cross-encoder re-ranking (None uses config default)
 
         Returns:
             Dict with search results or error
@@ -109,7 +116,7 @@ class SearchCodeTool:
         # Perform search
         try:
             hybrid_search = HybridSearch(db_path, vector_path)
-            results = hybrid_search.search(query, limit=limit)
+            results = hybrid_search.search(query, limit=limit, rerank=rerank)
             hybrid_search.close()
         except Exception as e:
             return {
@@ -155,10 +162,15 @@ class SearchCodeTool:
             except ValueError:
                 rel_path = Path(result.path).name
 
+            # Build score info
+            score_info = f"Rank: {result.rank}"
+            if result.rerank_score > 0:
+                score_info += f" (relevance: {result.rerank_score:.2f})"
+
             output_lines.append(
                 f"Code snippet ({result.language}) [chunk_type: {result.chunk_type}]\n"
                 f"Location: {rel_path}:{result.start_line}-{result.end_line}\n"
-                f"Rank: {result.rank}\n"
+                f"{score_info}\n"
                 f"Context:\n```\n{content}\n```\n"
             )
 

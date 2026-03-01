@@ -65,16 +65,46 @@ def mock_embedder():
     return mock
 
 
+@pytest.fixture
+def mock_cross_encoder():
+    """Create a mock cross-encoder for testing."""
+    from codii.indexers.hybrid_search import SearchResult
+
+    mock = MagicMock()
+    mock._model = MagicMock()
+    mock._initialized = True
+    mock.model_name = "mock-cross-encoder"
+
+    def mock_rerank(query, candidates, top_k=10, threshold=0.5):
+        # Return candidates with mock rerank scores
+        import math
+        results = []
+        for i, candidate in enumerate(candidates[:top_k]):
+            # Give each result a score based on position (higher = better)
+            score = 0.9 - (i * 0.1)
+            if score >= threshold:
+                candidate.rerank_score = score
+                results.append(candidate)
+        return results
+
+    mock.rerank = mock_rerank
+    return mock
+
+
 @pytest.fixture(autouse=True)
-def auto_mock_embedder(mock_embedder):
-    """Automatically mock the embedder for all tests."""
+def auto_mock_embedder(mock_embedder, mock_cross_encoder):
+    """Automatically mock the embedder and cross-encoder for all tests."""
     # Patch get_embedder function everywhere it might be imported
     with patch('codii.embedding.embedder.get_embedder', return_value=mock_embedder):
         with patch('codii.indexers.vector_indexer.get_embedder', return_value=mock_embedder):
-            # Also reset the singleton instance
-            import codii.embedding.embedder as embedder_module
-            embedder_module.Embedder._instance = None
-            yield mock_embedder
+            # Patch get_cross_encoder for all tests
+            with patch('codii.embedding.cross_encoder.get_cross_encoder', return_value=mock_cross_encoder):
+                # Also reset the singleton instances
+                import codii.embedding.embedder as embedder_module
+                embedder_module.Embedder._instance = None
+                import codii.embedding.cross_encoder as cross_encoder_module
+                cross_encoder_module.CrossEncoderWrapper._instance = None
+                yield mock_embedder
 
 
 @pytest.fixture
@@ -303,11 +333,16 @@ def reset_global_state():
     import codii.embedding.embedder as embedder_module
     embedder_module.Embedder._instance = None
 
+    # Reset cross-encoder singleton
+    import codii.embedding.cross_encoder as cross_encoder_module
+    cross_encoder_module.CrossEncoderWrapper._instance = None
+
     yield
 
     # Reset after test
     config_module._config = None
     embedder_module.Embedder._instance = None
+    cross_encoder_module.CrossEncoderWrapper._instance = None
 
 
 @pytest.fixture

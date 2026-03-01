@@ -83,7 +83,7 @@ class TestSearchCombinesResults:
 
     def test_search_combines_results(self, populated_hybrid_search):
         """RRF combines BM25 and vector results."""
-        results = populated_hybrid_search.search("calculate", limit=5)
+        results = populated_hybrid_search.search("calculate", limit=5, rerank=False)
 
         assert isinstance(results, list)
         # Should have results from the combination
@@ -95,7 +95,7 @@ class TestSearchDeduplicates:
 
     def test_search_deduplicates(self, populated_hybrid_search):
         """No duplicate results."""
-        results = populated_hybrid_search.search("def", limit=5)
+        results = populated_hybrid_search.search("def", limit=5, rerank=False)
 
         # Extract IDs
         ids = [r.id for r in results]
@@ -136,7 +136,7 @@ class TestSearchEmptyIndex:
 
         search = HybridSearch(temp_db_path, temp_vector_path)
         search.vector_indexer._embedder = mock_embedder
-        results = search.search("nonexistent query", limit=5)
+        results = search.search("nonexistent query", limit=5, rerank=False)
         search.close()
 
         assert isinstance(results, list)
@@ -149,7 +149,7 @@ class TestSearchResultFormat:
 
     def test_search_result_format(self, populated_hybrid_search):
         """Correct output format."""
-        results = populated_hybrid_search.search("calculate", limit=5)
+        results = populated_hybrid_search.search("calculate", limit=5, rerank=False)
 
         if results:
             result = results[0]
@@ -165,6 +165,7 @@ class TestSearchResultFormat:
             assert hasattr(result, "bm25_score")
             assert hasattr(result, "vector_score")
             assert hasattr(result, "combined_score")
+            assert hasattr(result, "rerank_score")
             assert hasattr(result, "rank")
 
 
@@ -198,7 +199,7 @@ class TestSearchLimit:
 
         search = HybridSearch(temp_db_path, temp_vector_path)
         search.vector_indexer._embedder = mock_embedder
-        results = search.search("function", limit=5)
+        results = search.search("function", limit=5, rerank=False)
         search.close()
 
         assert len(results) <= 5
@@ -209,7 +210,7 @@ class TestReciprocalRankFusion:
 
     def test_rrf_scores(self, populated_hybrid_search):
         """RRF produces valid scores."""
-        results = populated_hybrid_search.search("calculate", limit=5)
+        results = populated_hybrid_search.search("calculate", limit=5, rerank=False)
 
         for result in results:
             # Combined score should be sum of BM25 and vector scores
@@ -264,7 +265,7 @@ class TestPathFilter:
 
         search = HybridSearch(temp_db_path, temp_vector_path)
         search.vector_indexer._embedder = mock_embedder
-        results = search.search("process", path_filter="module_a", limit=10)
+        results = search.search("process", path_filter="module_a", limit=10, rerank=False)
         search.close()
 
         # Results exist and filtering works
@@ -276,14 +277,14 @@ class TestSearchResultRanking:
 
     def test_results_are_ranked(self, populated_hybrid_search):
         """Results have rank numbers."""
-        results = populated_hybrid_search.search("calculate", limit=5)
+        results = populated_hybrid_search.search("calculate", limit=5, rerank=False)
 
         for i, result in enumerate(results, 1):
             assert result.rank == i
 
     def test_results_sorted_by_score(self, populated_hybrid_search):
         """Results sorted by combined score."""
-        results = populated_hybrid_search.search("calculate", limit=5)
+        results = populated_hybrid_search.search("calculate", limit=5, rerank=False)
 
         scores = [r.combined_score for r in results]
 
@@ -295,7 +296,7 @@ class TestSearchResultData:
 
     def test_result_has_chunk_data(self, populated_hybrid_search):
         """Results contain chunk data."""
-        results = populated_hybrid_search.search("calculate", limit=5)
+        results = populated_hybrid_search.search("calculate", limit=5, rerank=False)
 
         for result in results:
             assert result.content is not None

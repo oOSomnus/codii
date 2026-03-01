@@ -31,6 +31,7 @@ graph TB
         subgraph Core
             CH[AST Chunker]
             EM[Embedder]
+            CE[Cross-Encoder]
             MK[Merkle Tree]
         end
 
@@ -69,6 +70,7 @@ graph TB
     T2 --> HYB
     HYB --> BM25
     HYB --> VEC
+    HYB --> CE
     BM25 --> DB
     VEC --> IDX
     T4 --> SNAP
@@ -142,12 +144,14 @@ sequenceDiagram
     S->>BM25: BM25 search
     S->>VEC: Vector search
     S->>S: Reciprocal Rank Fusion
+    S->>S: Cross-Encoder Re-ranking
     S-->>C: Search results
 ```
 
 ## Features
 
 - **Hybrid Search**: Combines BM25 (SQLite FTS5) and vector search (HNSW) for optimal code retrieval
+- **Cross-Encoder Re-ranking**: Results are re-scored with a cross-encoder for improved relevance (enabled by default)
 - **Smart Query Processing**: Multi-word queries are optimized with OR-matching, wildcards, code tokenization, and abbreviation expansion for better recall
 - **AST-Aware Chunking**: Uses tree-sitter for semantic code splitting (functions, classes, etc.)
 - **Incremental Updates**: Merkle tree-based change detection for efficient re-indexing - only processes added, modified, or removed files instead of re-indexing everything
@@ -389,7 +393,8 @@ Search indexed code.
     "path": "/path/to/repo",    # Required: Absolute path
     "query": "function to sort", # Required: Search query
     "limit": 10,                 # Optional: Max results (default 10, max 50)
-    "extensionFilter": [".py"]   # Optional: Filter by extension
+    "extensionFilter": [".py"],  # Optional: Filter by extension
+    "rerank": true               # Optional: Enable cross-encoder re-ranking (default: true)
 }
 ```
 
@@ -561,7 +566,8 @@ codii/
 │   │   ├── ast_chunker.py     # tree-sitter based
 │   │   └── text_chunker.py    # Fallback
 │   ├── embedding/             # Embedding utilities
-│   │   └── embedder.py
+│   │   ├── embedder.py
+│   │   └── cross_encoder.py   # Re-ranking model
 │   ├── merkle/                # Change detection
 │   │   └── tree.py
 │   ├── storage/               # Persistence

@@ -170,6 +170,7 @@ dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pathspec" },
+    { name = "rich" },
     { name = "sentence-transformers" },
     { name = "torch" },
     { name = "tree-sitter" },
@@ -181,6 +182,7 @@ dependencies = [
     { name = "tree-sitter-python" },
     { name = "tree-sitter-rust" },
     { name = "tree-sitter-typescript" },
+    { name = "typer" },
 ]
 
 [package.optional-dependencies]
@@ -199,6 +201,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+    { name = "rich", specifier = ">=13.0.0" },
     { name = "sentence-transformers", specifier = ">=2.2.0" },
     { name = "torch", specifier = ">=2.0.0" },
     { name = "tree-sitter", specifier = ">=0.21.0" },
@@ -210,6 +213,7 @@ requires-dist = [
     { name = "tree-sitter-python", specifier = ">=0.21.0" },
     { name = "tree-sitter-rust", specifier = ">=0.21.0" },
     { name = "tree-sitter-typescript", specifier = ">=0.21.0" },
+    { name = "typer", specifier = ">=0.9.0" },
 ]
 provides-extras = ["dev"]
 

@@ -172,6 +172,7 @@ class SearchResult:
     bm25_score: float = 0.0    # BM25 contribution to RRF score
     vector_score: float = 0.0  # Vector similarity contribution to RRF score
     combined_score: float = 0.0 # Final RRF score
+    rerank_score: float = 0.0  # Cross-encoder relevance score (0-1, only set when re-ranking enabled)
     rank: int = 0              # Result rank (1-based)
 ```
 
@@ -249,6 +250,12 @@ class CodiiConfig:
     max_search_limit: int = 50
     bm25_weight: float = 0.5          # Weight for BM25 in hybrid search
     vector_weight: float = 0.5        # Weight for vector search in hybrid search
+
+    # Re-ranking settings
+    rerank_enabled: bool = True       # Enable cross-encoder re-ranking
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # Cross-encoder model
+    rerank_candidates: int = 30       # Number of candidates to fetch for re-ranking
+    rerank_threshold: float = 0.5     # Minimum relevance score (0-1) to include in results
 
     # Default ignore patterns (extends this list)
     default_ignore_patterns: List[str] = [

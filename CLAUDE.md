@@ -61,6 +61,8 @@ The codebase follows a strict layered architecture where dependencies flow downw
 
 **Singleton Embedder**: The `Embedder` class uses singleton pattern to ensure only one sentence-transformers model is loaded. Access via `get_embedder()`.
 
+**Singleton Cross-Encoder**: The `CrossEncoderWrapper` class uses singleton pattern for re-ranking. Access via `get_cross_encoder()`.
+
 **Background Indexing**: `index_codebase` runs indexing in a background thread. Progress is tracked via `SnapshotManager` in `~/.codii/snapshots/snapshot.json`. Check status with `get_indexing_status`.
 
 **Incremental Indexing**: Re-indexing automatically detects changes via Merkle tree comparison:
@@ -71,6 +73,8 @@ The codebase follows a strict layered architecture where dependencies flow downw
 - Use `force=true` to trigger a full re-index
 
 **Hybrid Search**: Uses Reciprocal Rank Fusion (RRF) to combine BM25 and vector search results. See `hybrid_search.py:_reciprocal_rank_fusion()`.
+
+**Cross-Encoder Re-ranking**: After RRF combines results, a cross-encoder model (`cross-encoder/ms-marco-MiniLM-L-6-v2`) re-scores candidates for improved relevance. Enabled by default, can be disabled via `rerank=False` parameter or config. Scores are normalized to 0-1 range using sigmoid; results below threshold (0.5) are filtered out.
 
 **Query Preprocessing**: Multi-word queries are preprocessed for better recall:
 - OR-based matching: "page table walk" → "page* OR table* OR walk*"

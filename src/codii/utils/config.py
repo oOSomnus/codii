@@ -92,6 +92,12 @@ class CodiiConfig:
     bm25_weight: float = 0.5
     vector_weight: float = 0.5
 
+    # Re-ranking settings
+    rerank_enabled: bool = True  # Enabled by default
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # Fast and effective
+    rerank_candidates: int = 30  # Number of candidates to fetch for re-ranking
+    rerank_threshold: float = 0.5  # Minimum score threshold (normalized 0-1)
+
     @property
     def indexes_dir(self) -> Path:
         """Get the indexes directory."""
