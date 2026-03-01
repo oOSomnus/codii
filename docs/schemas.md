@@ -25,6 +25,43 @@ Location: `~/.codii/indexes/<path-hash>/chunks.db`
 
 The database uses SQLite with FTS5 for full-text search capabilities.
 
+### Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    chunks ||--o{ chunks_fts : "indexes"
+    files ||--o{ chunks : "contains"
+
+    chunks {
+        INTEGER id PK
+        TEXT content
+        TEXT path FK
+        INTEGER start_line
+        INTEGER end_line
+        TEXT language
+        TEXT chunk_type
+        TIMESTAMP created_at
+    }
+
+    chunks_fts {
+        INTEGER rowid PK
+        TEXT content
+        TEXT path
+        TEXT language
+    }
+
+    files {
+        TEXT path PK
+        TEXT hash
+        TIMESTAMP last_modified
+    }
+```
+
+**Relationships:**
+- `chunks_fts` is an FTS5 virtual table that indexes `chunks` content via `rowid` → `chunks.id`
+- Multiple `chunks` can belong to one `file` (one-to-many via `path`)
+- Triggers (`chunks_ai`, `chunks_ad`, `chunks_au`) keep `chunks_fts` synchronized with `chunks`
+
 ### chunks Table
 
 Stores code chunks with metadata for retrieval.
